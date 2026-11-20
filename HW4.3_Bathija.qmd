@@ -1,0 +1,610 @@
+---
+title : "HW #4.3: My First Reproducible Data Analysis"
+subtitle : "Stat 184"
+author : "Kabir Bathija"
+date : "Nov. 18, 2026"
+date-modified : now
+lang : en
+format :
+  pdf :
+    toc : false
+    number-sections : true
+    number-depth : 5
+    fig-align : center
+    cap-location : top
+    geometry :
+      - top=1in
+      - left=1in
+      - right=1in
+      - bottom=1in
+    colorlinks : true
+execute :
+  echo : false
+  warning : false
+---
+
+```{r}
+#| label: setup
+
+# Load Packages ----
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+
+```
+
+# Introduction {#sec-intro}
+
+In this document, I bring together several pieces of work from Stat 184 into one reproducible report. In @sec-diamonds, I look at the physical sizes of diamonds broken down by clarity. In @sec-btaa, I share my data visualization for the Big 10 Academic Alliance Love Data Week challenge. In @sec-monteCarlo, I use Monte Carlo simulation to estimate a definite integral. In @sec-genAI, I make a plan for a new data context and compare what a genAI tool did with my plan versus a generic prompt. I end with a reflection on what I have learned so far in @sec-reflection.
+
+# Diamonds Table of Statistics {#sec-diamonds}
+
+The diamonds data set (from {ggplot2}) has information on about 54,000 diamonds. Three of the case attributes describe the physical size of each diamond: length (x), width (y), and depth (z), all measured in millimeters. Before calculating anything, I removed the diamonds that had a value of 0 for any of these three dimensions since a real diamond cannot have a size of 0. This left 53,920 diamonds. I then broke the diamonds down by their clarity, which goes from I1 (the worst) up to IF (internally flawless).
+
+```{r}
+#| label: diamondsStats
+
+# Load the Diamonds Data ----
+data(diamonds)
+
+# Calculate the Stats for Each Dimension and Clarity ----
+diamondStats <- diamonds |>
+  filter(x != 0, y != 0, z != 0) |> # take out diamonds with a 0 dimension
+  pivot_longer(cols = c(x, y, z), names_to = "dimension", values_to = "value") |>
+  group_by(dimension, clarity) |>
+  summarize(
+    count = n(),
+    min = min(value),
+    quint1 = quantile(value, probs = 0.2),
+    quint2 = quantile(value, probs = 0.4),
+    median = median(value),
+    quint3 = quantile(value, probs = 0.6),
+    quint4 = quantile(value, probs = 0.8),
+    max = max(value),
+    mean = mean(value),
+    sd = sd(value),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+#| label: tbl-diamondLength
+#| tbl-cap: "Summary Statistics on Diamond Length by Clarity"
+#| tbl-pos: H
+
+# Make Diamond Length Table ----
+diamondStats |>
+  filter(dimension == "x") |>
+  select(-dimension) |>
+  kable(
+    digits = 2,
+    col.names = c("Clarity", "Freq.", "Min", "20%-tile", "40%-tile", "Median",
+                  "60%-tile", "80%-tile", "Max", "SAM", "SASD"),
+    format.args = list(big.mark = ","),
+    align = "lcccccccccc",
+    booktabs = TRUE
+  ) |>
+  kable_classic(latex_options = c("scale_down", "HOLD_position")) |>
+  add_footnote(
+    label = c("Length (x) was measured in millimeters."),
+    notation = "none",
+    threeparttable = TRUE
+  )
+
+```
+
+```{r}
+#| label: tbl-diamondWidth
+#| tbl-cap: "Summary Statistics on Diamond Width by Clarity"
+#| tbl-pos: H
+
+# Make Diamond Width Table ----
+diamondStats |>
+  filter(dimension == "y") |>
+  select(-dimension) |>
+  kable(
+    digits = 2,
+    col.names = c("Clarity", "Freq.", "Min", "20%-tile", "40%-tile", "Median",
+                  "60%-tile", "80%-tile", "Max", "SAM", "SASD"),
+    format.args = list(big.mark = ","),
+    align = "lcccccccccc",
+    booktabs = TRUE
+  ) |>
+  kable_classic(latex_options = c("scale_down", "HOLD_position")) |>
+  add_footnote(
+    label = c("Width (y) was measured in millimeters."),
+    notation = "none",
+    threeparttable = TRUE
+  )
+
+```
+
+```{r}
+#| label: tbl-diamondDepth
+#| tbl-cap: "Summary Statistics on Diamond Depth by Clarity"
+#| tbl-pos: H
+
+# Make Diamond Depth Table ----
+diamondStats |>
+  filter(dimension == "z") |>
+  select(-dimension) |>
+  kable(
+    digits = 2,
+    col.names = c("Clarity", "Freq.", "Min", "20%-tile", "40%-tile", "Median",
+                  "60%-tile", "80%-tile", "Max", "SAM", "SASD"),
+    format.args = list(big.mark = ","),
+    align = "lcccccccccc",
+    booktabs = TRUE
+  ) |>
+  kable_classic(latex_options = c("scale_down", "HOLD_position")) |>
+  add_footnote(
+    label = c("Depth (z) was measured in millimeters."),
+    notation = "none",
+    threeparttable = TRUE
+  )
+
+```
+
+@tbl-diamondLength, @tbl-diamondWidth, and @tbl-diamondDepth show the same pattern for all three dimensions: diamonds with better clarity tend to be smaller. For example, the median length drops from 6.64 mm for I1 diamonds down to 4.57 mm for IF diamonds, and the median depth drops from 4.11 mm to 2.80 mm. I think this makes sense because big diamonds with almost no flaws are rare (and super expensive), so most of the really clear diamonds are on the smaller side.
+
+The counts also show that most diamonds are in the middle clarity levels. SI1 and VS2 each have over 12,000 diamonds, while I1 only has 738. In every table the sample arithmetic mean (SAM) is a little bigger than the median for the clearer diamonds, which tells me those groups have a few larger diamonds pulling the mean up.
+
+One thing that stands out in @tbl-diamondWidth is the maximum width of 58.90 mm for SI2 and 31.80 mm for VS1. Every other group tops out somewhere around 8 to 10 mm, so these are huge outliers and are probably data entry mistakes. The same 31.80 mm value shows up as the maximum depth for VS1 in @tbl-diamondDepth. Because of these outliers, the median is a safer value to compare across clarity levels than the max or the SAM.
+
+# Big 10 Academic Alliance-Love Data Week {#sec-btaa}
+
+For the Big 10 Academic Alliance (BTAA) Love Data Week Data Viz Championship, we worked with NCAA Women's Basketball data from ESPN (processed through {wehoop}). I used the team box score file, where each row is one team in one game. I wanted to know whether teams that shoot better from three-point range win more games, and where Penn State and the rest of the Big Ten fall compared to all of Division I. To get there, I combined the games into one row per team per season with each team's three-point percentage and win percentage, and I only kept teams that played at least 10 games.
+
+```{r}
+#| label: btaaLoad
+
+# Load the NCAA Women's Basketball Data ----
+teamBox <- read.table(
+  file = "team_box.csv",
+  header = TRUE,
+  sep = ",",
+  quote = "\""
+)
+
+# Big Ten teams ----
+bigTen <- c(
+  "Illinois", "Indiana", "Iowa", "Maryland", "Michigan", "Michigan State",
+  "Minnesota", "Nebraska", "Northwestern", "Ohio State", "Oregon", "Penn State",
+  "Purdue", "Rutgers", "UCLA", "USC", "Washington", "Wisconsin"
+)
+
+```
+
+```{r}
+#| label: btaaWrangle
+
+# Wrangle the Data ----
+teamSeasons <- teamBox |>
+  select(season, team_id, team_location, team_winner,
+         three_point_field_goals_made, three_point_field_goals_attempted) |>
+  filter_out(is.na(three_point_field_goals_attempted)) |>
+  group_by(season, team_id, team_location) |>
+  summarize(
+    games = n(),
+    wins = sum(team_winner),
+    threesMade = sum(three_point_field_goals_made),
+    threesTried = sum(three_point_field_goals_attempted),
+    .groups = "drop"
+  ) |>
+  filter(games >= 10) |>
+  mutate(
+    threePct = threesMade / threesTried,
+    winPct = wins / games,
+    isBigTen = team_location %in% bigTen
+  )
+
+# Keep the Most Recent Season ----
+latestSeason <- teamSeasons |>
+  filter(season == max(season)) |>
+  mutate(
+    threePct = threePct * 100,
+    winPct = winPct * 100
+  )
+
+bigTenTeams <- latestSeason |>
+  filter(isBigTen)
+
+pennState <- latestSeason |>
+  filter(team_location == "Penn State")
+
+```
+
+```{r}
+#| label: fig-btaa
+#| fig-cap: "Three-Point Percentage vs. Win Percentage for NCAA Women's Basketball Teams"
+#| fig-pos: H
+#| fig-height: 4
+#| fig-alt: "Scatter plot of three-point percentage vs. win percentage for NCAA women's basketball teams. Big Ten teams are in navy and Penn State is labeled. An upward trend line shows better three-point shooting teams tend to win more."
+
+# Make the BTAA Plot ----
+ggplot(
+  data = latestSeason,
+  mapping = aes(x = threePct, y = winPct)
+) +
+  geom_point(color = "gray70", alpha = 0.5) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, color = "black") +
+  geom_point(data = bigTenTeams, color = "#1E407C", size = 2.5) +
+  geom_text(data = pennState, label = "Penn State", vjust = -1, fontface = "bold") +
+  labs(
+    x = "Three-Point Percentage (%)",
+    y = "Win Percentage (%)",
+    title = "Do Better 3-Point Shooters Win More?",
+    subtitle = "NCAA Women's Basketball teams, most recent season (Big Ten in navy)",
+    caption = "Data: NCAA Women's Basketball (ESPN via wehoop)"
+  ) +
+  theme_bw()
+
+```
+
+@fig-btaa shows that teams who shoot better from three tend to win more games, but three-point shooting is far from the whole story. The trend line goes up, so a few extra percentage points from three usually comes with a better record. That makes sense since a made three is worth 50% more than a two, so a team that hits them consistently can pull away or come back faster.
+
+The points are pretty spread out around the trend line, though. Some teams shoot well from three and still lose a lot, and other teams win a lot without being great three-point shooters. To me this says that things like defense, rebounding, and turnovers matter just as much. Most of the Big Ten teams sit above the middle of the cloud, which backs up the idea that the Big Ten is one of the stronger conferences. Penn State's label lets a reader quickly see how we compare to both the Big Ten and the rest of Division I.
+
+# Monte Carlo Numerical Integration {#sec-monteCarlo}
+
+Numerical integration is the process of evaluating a definite integral to get a number. Instead of a deterministic method like Riemann sums, Monte Carlo integration uses randomness. The idea is to draw a rectangle around the part of the function we care about, throw $n$ random points into that rectangle, and flag each point as either above the function or on/below it. The proportion of points that land on/below the function, $p$, times the area of the rectangle gives an estimate of the integral.
+
+My assigned function was the probability density function (PDF) of the Weibull distribution with shape $k = 1.5$ and scale $\lambda = 1$. The bounds of integration were $0 \leq x \leq 4$, and I used $0 \leq y \leq 0.8$ for the rectangle, so the area of the rectangle is $(4 - 0) \cdot (0.8 - 0) = 3.2$. So I am estimating
+$$\int_0^4 \frac{k}{\lambda}\left(\frac{x}{\lambda}\right)^{k-1}e^{-(x/\lambda)^k}\,dx.$$
+
+```{r}
+#| label: mcFunction
+
+# Monte Carlo Simulation Function ----
+## Makes n random (x, y) points inside a box set by the user and returns them as a data frame.
+mc_simulation <- function(n, x_min, x_max, y_min, y_max) {
+  x <- runif(n = n, min = x_min, max = x_max)
+  y <- runif(n = n, min = y_min, max = y_max)
+  points <- data.frame(x = x, y = y)
+  return(points)
+}
+
+```
+
+```{r}
+#| label: mcPlotFunction
+
+# Weibull settings (from the "R Code for Your Function" button) ----
+myShape <- 1.5
+myScale <- 1
+boxArea <- (4 - 0) * (0.8 - 0)
+
+# Function to Flag the Points, Estimate the Integral, and Make the Plot ----
+mc_plot <- function(n) {
+  mcPoints <- mc_simulation(n = n, x_min = 0, x_max = 4, y_min = 0, y_max = 0.8) |>
+    mutate(
+      curve = dweibull(x, shape = myShape, scale = myScale),
+      flag = if_else(y <= curve, "on/below", "above")
+    )
+
+  estimate <- boxArea * mean(mcPoints$flag == "on/below")
+
+  mcPlot <- ggplot(
+    data = mcPoints,
+    mapping = aes(x = x, y = y, color = flag)
+  ) +
+    geom_point(size = 0.8) +
+    geom_function(
+      fun = dweibull,
+      args = list(shape = myShape, scale = myScale),
+      color = "#1E407C",
+      linewidth = 1
+    ) +
+    scale_color_manual(values = c("above" = "#BC204B", "on/below" = "#99CC00")) +
+    labs(
+      x = "x",
+      y = "y",
+      color = "Flag",
+      title = paste0("n = ", n),
+      caption = paste("Est. Numerical Integration:", round(estimate, 4))
+    ) +
+    theme_bw() +
+    theme(legend.position = "bottom")
+
+  return(list(plot = mcPlot, estimate = estimate))
+}
+
+# Run the Simulation at Each Resolution ----
+set.seed(184)
+mc10 <- mc_plot(n = 10)
+mc100 <- mc_plot(n = 100)
+mc1000 <- mc_plot(n = 1000)
+mc10000 <- mc_plot(n = 10000)
+
+```
+
+```{r}
+#| label: fig-mcSmallMultiple
+#| fig-cap: "Monte Carlo Integration of the Weibull PDF at Four Resolutions"
+#| fig-subcap:
+#|   - "n = 10 points"
+#|   - "n = 100 points"
+#|   - "n = 1,000 points"
+#|   - "n = 10,000 points"
+#| fig-alt:
+#|   - "Scatter plot of 10 random points around a Weibull density curve, colored by whether they are above or on/below the curve."
+#|   - "Scatter plot of 100 random points around a Weibull density curve, colored by whether they are above or on/below the curve."
+#|   - "Scatter plot of 1,000 random points around a Weibull density curve, colored by whether they are above or on/below the curve."
+#|   - "Scatter plot of 10,000 random points that fill in the area above and below a Weibull density curve."
+#| layout-ncol: 2
+#| fig-pos: H
+
+# Make the Small Multiple ----
+mc10$plot
+mc100$plot
+mc1000$plot
+mc10000$plot
+
+```
+
+@fig-mcSmallMultiple shows my Monte Carlo simulation at four different resolutions. Each panel uses the same rectangle, and the navy line is the Weibull density curve, which rises quickly from 0 to a single peak (about 0.75 near $x = 0.5$) and then slowly tails off toward 0. The green points landed on or below the curve and the red points landed above it.
+
+With only 10 points, the estimate is `r round(mc10$estimate, 4)`, and with 100 points it is `r round(mc100$estimate, 4)`. These estimates are pretty rough because each point counts for a big piece of the 3.2 area (with 10 points, a single point changes the estimate by 0.32). At 1,000 points the estimate is `r round(mc1000$estimate, 4)`, and at 10,000 points it is `r round(mc10000$estimate, 4)`. By then the green points completely fill in the area under the curve, and you can see the shape of the Weibull curve just from the colors.
+
+I believe the exact answer to this integral is just about 1. The Weibull function is a probability density, and the total area under any density curve is 1. The exact area from 0 to 4 is the Weibull cumulative distribution function (CDF) at 4, which is $1 - e^{-(4/1)^{1.5}} = 1 - e^{-8} \approx 0.9997$. In the small multiple, you can see the curve flatten out to almost 0 well before $x = 4$, so almost none of the area is cut off. As the number of points goes up, the estimates settle in closer and closer to 1. So even someone who doesn't know the formula for the Weibull CDF could look at the four panels side by side and see the estimates converging to about 1.
+
+# Planning and Prompting GenAI Tools {#sec-genAI}
+
+## Data Context {#sec-genAIContext}
+
+The course's Section 4 data context and the provided generic-prompt results were not available to me, so I used a data context that comes built into R: the `relig_income` data from the {tidyr} package. These data come from a Pew Research Center survey of 35,556 people. Each row is a religious tradition (18 rows), and each of the other 10 columns is an income bracket (from "<$10k" up to ">150k", plus "Don't know/refused"). The values are the number of people from that religion who fall in that income bracket. This is not tidy since the income brackets are stored as column names instead of values of an attribute. I ran both the plan-based prompt and the generic prompt myself in the same genAI tool, Claude (Anthropic, Opus 5.5).
+
+## My Plan {#sec-genAIPlan}
+
+**Goal:** Create a data visualization of the `relig_income` data in R to learn how household income is distributed within each religious tradition, and which traditions have the largest share of people earning \$75k or more.
+
+- SG1: Load the data and identify the issues for tidying.
+- SG2: Tidy the data so that each row is one religion and income bracket pair with its count.
+- SG3: Turn the counts into proportions within each religion so the religions can be compared fairly, even though their sample sizes are very different.
+- SG4: Build and polish a 100% stacked bar chart with the income brackets in the right order.
+
+**Needs**
+
+*Nouns:* the `relig_income` data (from {tidyr}), the {tidyverse} package, the religion attribute, the 10 income bracket columns, the "Don't know/refused" column and row, counts, proportions, an ordered income factor, a tidy data frame, a 100% stacked bar chart, a sequential color palette, labels and a title
+
+*Verbs:* loading, viewing, checking, pivoting (longer), filtering, ordering (factor levels), grouping, calculating (proportions), sorting, plotting, coloring, labeling, interpreting
+
+**Steps**
+
+1. Load the {tidyverse} and the `relig_income` data, then use View and str to see that the income brackets are stored as column names.
+2. Pivot the income columns longer so there is one column for income and one for the count, then filter out the "Don't know/refused" income column and the "Don't know/refused" religion row since they don't tell us anything about income.
+3. Turn income into a factor with the brackets in order from lowest to highest so they don't end up in alphabetical order.
+4. Group by religion and calculate each bracket's proportion of that religion's total, then sort the religions by their share earning \$75k or more.
+5. Make a horizontal 100% stacked bar chart with ggplot and geom_col, use a colorblind-friendly sequential palette for income, add clear labels and a title, and interpret which religions earn more or less.
+
+## Results from My Plan-Based Prompt {#sec-genAIPlanResults}
+
+I gave my plan to Claude as a prompt (the exact prompt and response are in @sec-genAIUsage). The code it gave me ran with no errors, and @fig-planAI shows the result.
+
+```{r}
+#| label: fig-planAI
+#| fig-cap: "Plot from My Plan-Based Prompt"
+#| fig-pos: H
+#| fig-height: 5.5
+#| fig-alt: "Horizontal 100% stacked bar chart of income brackets for 17 religious traditions, ordered from Hindu at the top to Historically Black Protestant at the bottom."
+
+# Plan-Based Prompt Plot (code from Claude) ----
+data(relig_income)
+
+incomeLevels <- c("<$10k", "$10-20k", "$20-30k", "$30-40k", "$40-50k",
+                  "$50-75k", "$75-100k", "$100-150k", ">150k")
+
+religTidy <- relig_income |>
+  pivot_longer(cols = -religion, names_to = "income", values_to = "count") |>
+  filter(income != "Don't know/refused") |>
+  filter(!str_detect(religion, "know/refused")) |>
+  mutate(income = factor(income, levels = incomeLevels)) |>
+  group_by(religion) |>
+  mutate(prop = count / sum(count)) |>
+  ungroup()
+
+religOrder <- religTidy |>
+  filter(income %in% c("$75-100k", "$100-150k", ">150k")) |>
+  group_by(religion) |>
+  summarize(highShare = sum(prop)) |>
+  arrange(highShare)
+
+religTidy <- religTidy |>
+  mutate(religion = factor(religion, levels = religOrder$religion))
+
+ggplot(
+  data = religTidy,
+  mapping = aes(x = prop, y = religion, fill = income)
+) +
+  geom_col() +
+  scale_x_continuous(labels = scales::label_percent()) +
+  scale_fill_viridis_d(option = "viridis", direction = -1) +
+  labs(
+    x = "Percent of Respondents",
+    y = "Religion",
+    fill = "Income",
+    title = "Household Income by Religious Tradition",
+    subtitle = "Religions ordered by share earning $75k or more",
+    caption = "Data: Pew Research Center, via {tidyr}"
+  ) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+```
+
+## Results from the Generic Prompt {#sec-genAIGeneric}
+
+For the generic prompt, I only asked Claude to make a plot of the `relig_income` data in R, with no plan. Its code also ran with no errors, and @fig-genericAI shows the result.
+
+```{r}
+#| label: fig-genericAI
+#| fig-cap: "Plot from the Generic Prompt"
+#| fig-pos: H
+#| fig-height: 5.5
+#| fig-alt: "Horizontal stacked bar chart of the count of people in each income bracket for 18 religions, with the income colors in alphabetical order."
+
+# Generic Prompt Plot (code from Claude) ----
+genericLong <- relig_income |>
+  pivot_longer(cols = -religion, names_to = "income", values_to = "count")
+
+ggplot(genericLong, aes(x = religion, y = count, fill = income)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Income Distribution by Religion",
+    x = "Religion",
+    y = "Count",
+    fill = "Income"
+  ) +
+  theme_minimal()
+
+```
+
+## Comparing the Two Results {#sec-genAICompare}
+
+Both prompts gave code that ran on the first try, and both used the same basic idea: pivot the income columns longer and make a stacked bar chart. That's where the similarities end, though.
+
+The generic result in @fig-genericAI has three big problems. First, it plots raw counts, so the bars mostly show how many people from each religion were surveyed. Evangelical Protestants and Catholics have huge bars, and groups like Hindu or Other World Religions are basically invisible, so you can't compare income across religions at all. Second, the income brackets are in alphabetical order, so the legend goes "$10-20k", "$100-150k", "$20-30k"... and "<$10k" and ">150k" end up near the bottom. That makes the colors meaningless as a scale. Third, it kept the "Don't know/refused" income bracket and even the "Don't know/refused" religion row, which aren't useful for this question.
+
+The plan-based result in @fig-planAI fixes all of these because my plan told it to. It uses proportions, so every bar is the same length and the religions can actually be compared. The income brackets go in order with a sequential palette, so darker means richer. The religions are also sorted by their share earning \$75k or more. From this plot I can actually learn something. Hindu (about 68%) and Jewish (about 59%) respondents have the biggest share earning \$75k or more, while Historically Black Protestant and Jehovah's Witness respondents have the smallest (around 18%).
+
+The biggest takeaway for me is that the genAI tool did exactly what it was asked, and nothing more. The generic prompt got a plot, but not a useful one. The plan made me think about the data first (what's untidy, what should be filtered, what order makes sense, and what "fair" comparison means), and then the tool just had to carry it out. One thing neither result points out is that some religions (like Hindu, with only 220 people who reported an income) have small sample sizes, so their percentages are less reliable than the big groups. That's something I would add to the plot as a note if I kept working on it.
+
+# Reflection {#sec-reflection}
+
+Coming into Stat 184, my goal was to get comfortable working with data in R on my own without having to look up every single step. Looking back, I've definitely made progress, and a few assignments really stand out.
+
+The biggest thing I've learned is to plan before I code. At first, writing out a goal, the nouns and verbs, and the steps felt like extra work. But on the US Armed Forces data, the plan is what saved me. That data had title rows, Total rows and columns, commas in the numbers, and "N/A\*" values, and it was missing the ranks completely. Because I listed every issue first, I knew I needed to pivot longer, separate the branch from the sex, parse the numbers, `uncount()` so each row was one person, and then join in the ranks I scraped from a webpage. Without the plan I would have just been guessing.
+
+I also learned that working code isn't the same as good code. In the Diamonds Challenge (HW #3.1), the original script copy-pasted the same block five times, once for each cut. Rewriting it with `pivot_longer()` and `group_by()` taught me what DRY code means, and that idea is exactly what let me build all three tables in @sec-diamonds from one data frame.
+
+Another big lesson was about details. In the Monte Carlo assignment, I used the wrong shape value for my Weibull function (2 instead of 1.5), and that one number cost me most of the points on that question. Now I always double check the settings I'm given before running anything. I also learned that small typos like `them_bw()` or a missing comma will stop everything, so reading error messages carefully is a real skill.
+
+Finally, data visualization is about more than making a plot. Adding alt text and long descriptions for the pirates, diamonds, and NCAA plots made me think about who is actually reading my work, and this Quarto document showed me how to put code, tables, plots, and writing together so someone else can reproduce everything I did.
+
+{{< pagebreak >}}
+
+# GenAI Usage {.appendix #sec-genAIUsage}
+
+**Tool:** Claude (Anthropic), model Claude Opus 5.5, used through the claude.ai web app.
+
+**Date of usage:** November 18, 2026.
+
+## Section 4 Prompts and Responses
+
+**Plan-based prompt (exact):**
+
+> Using R and the {tidyverse}, carry out this plan with the relig_income data from {tidyr}. Goal: make a data visualization showing how household income is distributed within each religious tradition, and which traditions have the largest share of people earning $75k or more. Steps: (1) Load the {tidyverse} and the relig_income data. (2) Pivot the income columns longer so there is one column for income and one for count, then filter out the "Don't know/refused" income column and the "Don't know/refused" religion row. (3) Turn income into a factor with the brackets ordered from lowest to highest. (4) Group by religion and calculate each bracket's proportion of that religion's total, then sort the religions by their share earning $75k or more. (5) Make a horizontal 100% stacked bar chart with ggplot and geom_col, use a colorblind-friendly sequential palette for income, add clear labels, a title, and a caption crediting Pew Research Center, use theme_bw, and put the legend at the bottom. Use the |> pipe.
+
+**Response (exact):**
+
+> Here's code that follows your plan step by step:
+>
+> ```r
+> library(tidyverse)
+> data(relig_income)
+>
+> incomeLevels <- c("<$10k", "$10-20k", "$20-30k", "$30-40k", "$40-50k",
+>                   "$50-75k", "$75-100k", "$100-150k", ">150k")
+>
+> religTidy <- relig_income |>
+>   pivot_longer(cols = -religion, names_to = "income", values_to = "count") |>
+>   filter(income != "Don't know/refused") |>
+>   filter(!str_detect(religion, "know/refused")) |>
+>   mutate(income = factor(income, levels = incomeLevels)) |>
+>   group_by(religion) |>
+>   mutate(prop = count / sum(count)) |>
+>   ungroup()
+>
+> religOrder <- religTidy |>
+>   filter(income %in% c("$75-100k", "$100-150k", ">150k")) |>
+>   group_by(religion) |>
+>   summarize(highShare = sum(prop)) |>
+>   arrange(highShare)
+>
+> religTidy <- religTidy |>
+>   mutate(religion = factor(religion, levels = religOrder$religion))
+>
+> ggplot(
+>   data = religTidy,
+>   mapping = aes(x = prop, y = religion, fill = income)
+> ) +
+>   geom_col() +
+>   scale_x_continuous(labels = scales::label_percent()) +
+>   scale_fill_viridis_d(option = "viridis", direction = -1) +
+>   labs(
+>     x = "Percent of Respondents",
+>     y = "Religion",
+>     fill = "Income",
+>     title = "Household Income by Religious Tradition",
+>     subtitle = "Religions ordered by share earning $75k or more",
+>     caption = "Data: Pew Research Center, via {tidyr}"
+>   ) +
+>   theme_bw() +
+>   theme(legend.position = "bottom")
+> ```
+>
+> The religion row is matched with `str_detect()` because its "Don't know/refused" label uses a curly apostrophe, so an exact match on a straight apostrophe would miss it. The viridis palette is reversed so darker colors mean higher income.
+
+**Generic prompt (exact):**
+
+> Using R, make a plot of the relig_income data set from the tidyr package.
+
+**Response (exact):**
+
+> Here's a stacked bar chart of income by religion:
+>
+> ```r
+> library(tidyverse)
+>
+> genericLong <- relig_income |>
+>   pivot_longer(cols = -religion, names_to = "income", values_to = "count")
+>
+> ggplot(genericLong, aes(x = religion, y = count, fill = income)) +
+>   geom_col() +
+>   coord_flip() +
+>   labs(
+>     title = "Income Distribution by Religion",
+>     x = "Religion",
+>     y = "Count",
+>     fill = "Income"
+>   ) +
+>   theme_minimal()
+> ```
+>
+> `pivot_longer()` reshapes the income columns into rows, and `coord_flip()` makes the religion names easier to read.
+
+## Other Uses of GenAI in This Assignment
+
+I also used Claude (Opus 5.5) on November 18, 2026 in one long chat to help put this document together. In that chat, Claude:
+
+- explained what the HW #4.3 assignment was asking for;
+- wrote the Quarto document, including the YAML header, code chunks, narrative text for each section, and the reflection, based on my earlier work from HW #3.1, #3.2, and #3.4 and on the Quarto Crash Course;
+- reorganized my HW #3.1/#3.2 diamonds code into the three tables in @sec-diamonds;
+- reused my HW #3.4 BTAA and Monte Carlo code, fixed the Weibull shape to 1.5 (from my HW #3.4 feedback), and rewrote my Monte Carlo narrative;
+- wrote the plan, prompts, and comparison in @sec-genAI.
+
+The prompts I typed in that chat included (exact):
+
+> "first explain me what this assignment wants I don't get it secondly check past chats for any work done related to R, Studio , Stat 184 , because it will be helpful what do u want from me for this assignment solving?"
+
+> "u solve hw 3.2 and do it for u ill not lets get this assignment done"
+
+> "ARE U ABLE TO ACCESS THE LINKS AND READ WHATS INDIDE? THIS IS VERY IMP, ALL THE MATERIAL GIVEN BY THE PROF, COPY ITS CODING WRITING STYLE - U ALR KNOW HOW TO WRITE THE CODE, MAKE IT LOOK LIKEW ITS WRITTEN BY ME (COLLEGE FRESHAMN), KEEP IT SIMPLE AND BASIC) , COPY THE WRITING STYLE OF THE PROFESSOR , WRITE CODE WHEREVER NEEDED NOW LETS SOLVE THIS"
+
+> "WHATEVERS NOT THERE NOW I DONT HAVE U DO UR WORK AND FINISH RTHE ASSIGNMENT"
+
+Claude's full responses in that chat were long (they included the full code and text that now appear in this document), so the full transcript is available on request.
+
+{{< pagebreak >}}
+
+# Code Appendix {.appendix}
+
+```{r}
+#| label: codeAppend
+#| ref-label: !expr knitr::all_labels()
+#| echo: true
+#| eval: false
+
+```
